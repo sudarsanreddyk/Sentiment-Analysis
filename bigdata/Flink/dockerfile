@@ -1,0 +1,31 @@
+FROM flink:2.0.0-scala_2.12-java11
+
+ARG FLINK_VERSION=2.0.0
+ARG SQL_KAFKA_CONNECTOR_VERSION=4.0.0-2.0
+
+# System deps and Python
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip curl && \
+    ln -sf /usr/bin/python3 /usr/local/bin/python
+
+# Python libs and NLTK resources
+RUN pip3 install --no-cache-dir \
+        apache-flink==${FLINK_VERSION} \
+        nltk \
+        textblob \
+        emot \
+        contractions \
+        emoji && \
+    python3 -m textblob.download_corpora
+
+ENV NLTK_DATA=/usr/local/share/nltk_data
+
+# Download NLTK resources including the new punkt_tab
+RUN python3 -m nltk.downloader -d $NLTK_DATA punkt punkt_tab averaged_perceptron_tagger stopwords
+
+# Kafka connector
+RUN curl -fsSL "https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka/${SQL_KAFKA_CONNECTOR_VERSION}/flink-sql-connector-kafka-${SQL_KAFKA_CONNECTOR_VERSION}.jar" \
+    -o "/opt/flink/lib/flink-sql-connector-kafka-${SQL_KAFKA_CONNECTOR_VERSION}.jar"
+
+WORKDIR /opt/flink/usrlib
+COPY . ./  

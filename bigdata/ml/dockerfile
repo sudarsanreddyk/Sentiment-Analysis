@@ -1,0 +1,20 @@
+FROM python:3.11-slim
+
+# System dependencies
+RUN apt-get update && apt-get install -y git
+
+# Install Python deps
+COPY ml/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy ML code
+COPY ml /app/ml
+WORKDIR /app
+
+# after training stage is done
+EXPOSE 8000
+CMD ["uvicorn", "ml.sentiment_api:app", "--host", "0.0.0.0", "--port", "8000"]
+# Entry point (optional)
+#CMD ["python", "ml/sentiment_model.py"]
+
+

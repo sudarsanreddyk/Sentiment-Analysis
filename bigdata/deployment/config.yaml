@@ -1,0 +1,51 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: reddit-sentiment
+  labels:
+    name: reddit-sentiment
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: reddit-sentiment
+data:
+  KAFKA_URL: "kafka"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  ZOOKEEPER_CLIENT_PORT: "2181"
+  KAFKA_BROKER_ID: "1"
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+  DYNAMIC_CONFIG_ENABLED: "true"
+  STARTUP_DELAY: "5"
+  PYTHONPATH: "/app/ml"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kafka-data-pvc
+  namespace: reddit-sentiment
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard-rwo
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ml-checkpoint-pvc
+  namespace: reddit-sentiment
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard-rwo

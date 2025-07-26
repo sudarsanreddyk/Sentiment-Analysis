@@ -1,0 +1,90 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-jobmanager-service
+  namespace: reddit-sentiment
+spec:
+  selector:
+    app: flink
+    component: jobmanager
+  ports:
+    - name: rpc
+      port: 6123
+    - name: blob
+      port: 6124
+    - name: query
+      port: 6125
+    - name: ui
+      port: 8081
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-jobmanager
+  namespace: reddit-sentiment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flink
+      component: jobmanager
+  template:
+    metadata:
+      labels:
+        app: flink
+        component: jobmanager
+    spec:
+      containers:
+        - name: jobmanager
+          image: sudarsan222/flink:v2
+          args: ["jobmanager"]
+          ports:
+            - containerPort: 6123
+            - containerPort: 6124
+            - containerPort: 6125
+            - containerPort: 8081
+          env:
+            - name: JOB_MANAGER_RPC_ADDRESS
+              value: flink-jobmanager-service
+            - name: KAFKA_URL
+              value: kafka
+            - name: FLINK_PROPERTIES
+              value: |
+                taskmanager.numberOfTaskSlots: 1
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-taskmanager
+  namespace: reddit-sentiment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flink
+      component: taskmanager
+  template:
+    metadata:
+      labels:
+        app: flink
+        component: taskmanager
+    spec:
+      containers:
+        - name: taskmanager
+          image: sudarsan222/flink:v2
+          args: ["taskmanager"]
+          ports:
+            - containerPort: 6121
+            - containerPort: 6122
+          env:
+            - name: JOB_MANAGER_RPC_ADDRESS
+              value: flink-jobmanager-service
+            - name: KAFKA_URL
+              value: kafka
+            - name: FLINK_PROPERTIES
+              value: |
+                taskmanager.numberOfTaskSlots: 1

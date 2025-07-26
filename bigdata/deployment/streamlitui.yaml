@@ -1,0 +1,68 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: streamlit-app-config
+  namespace: reddit-sentiment
+data:
+  streamlit_app.py: |
+    import streamlit as st
+    import requests
+    import pandas as pd
+    from streamlit_autorefresh import st_autorefresh
+    import time
+
+    st.set_page_config(page_title="Reddit Sentiment Analysis", layout="wide")
+    st.title("🎭 Reddit Sentiment Analysis Dashboard")
+
+    # Auto-refresh every 30 seconds
+    count = st_autorefresh(interval=30000, limit=1000, key="fizzbuzzcounter")
+
+    # API endpoint
+    API_URL = "http://ml-api-service:8000"
+
+    try:
+        # Get recent predictions
+        response = requests.get(f"{API_URL}/recent-predictions", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data:
+                df = pd.DataFrame(data)
+                st.subheader("Recent Sentiment Predictions")
+                st.dataframe(df, use_container_width=True)
+                
+                # Display metrics
+                if not df.empty:
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Predictions", len(df))
+                    with col2:
+                        positive_ratio = len(df[df['sentiment'] > 0.5]) / len(df)
+                        st.metric("Positive Sentiment", f"{positive_ratio:.1%}")
+                    with col3:
+                        avg_confidence = df['confidence'].mean()
+                        st.metric("Avg Confidence", f"{avg_confidence:.2f}")
+            else:
+                st.info("No predictions available yet. Please wait for data...")
+        else:
+            st.error(f"API Error: {response.status_code}")
+    except Exception as e:
+        st.error(f"Connection error: {str(e)}")
+        st.info("Make sure the ML API service is running")
+
+    # Test prediction section
+    st.subheader("Test Sentiment Prediction")
+    test_text = st.text_area("Enter text to analyze:")
+    if st.button("Analyze Sentiment"):
+        if test_text:
+            try:
+                response = requests.post(f"{API_URL}/predict", 
+                                       json={"text": test_text}, timeout=5)
+                if response.status_code == 200:
+                    result = response.json()
+                    sentiment = "Positive" if result['sentiment'] > 0.5 else "Negative"
+                    st.success(f"Sentiment: {sentiment} (Confidence: {result['confidence']:.2f})")
+                else:
+                    st.error("Prediction failed")
+            except Exception as e:
+                st.error(f"Error: {str(e)}")

@@ -1,0 +1,111 @@
+name: sentiment-analysis
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    hostname: zookeeper
+    container_name: sentiment-zookeeper
+    ports: ["2181:2181"]
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.9.1
+    hostname: kafka
+    container_name: sentiment-kafka
+    depends_on: [zookeeper]
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      #KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: sentiment-kafka-ui
+    ports: ["8080:8080"]
+    depends_on: [kafka]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: 'true'
+
+  jobmanager:
+    image: sudarsan222/flink:v2
+    container_name: sentiment-jobmanager
+    command: jobmanager
+    ports:
+      - "8081:8081"
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+
+
+
+  taskmanager:
+    image: sudarsan222/flink:v2
+    container_name: sentiment-taskmanager
+    command: taskmanager
+    depends_on: [jobmanager]
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 5
+
+
+# ---------- ML training job ----------
+  ml_trainer:
+    image: sudarsan222/reddit-sentiment:v2
+    container_name: sentiment-ml-trainer
+    command: python ml/sentiment_model.py
+    environment:
+      KAFKA_URL: kafka                
+    volumes:
+      - ./ckpt:/app/ckpt
+    depends_on:
+      - kafka
+
+# ---------- REST API ----------
+  ml_api:
+    image: sudarsan222/reddit-sentiment:v2
+    container_name: sentiment-ml-api
+    command: >
+      uvicorn ml.sentiment_api:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONPATH: /app/ml
+      KAFKA_URL: kafka 
+    volumes:
+      - ./ckpt:/app/ckpt
+
+   # --- Streamlit GUI -----------------------------------------
+  sentiment_ui:
+    image: sudarsan222/ui:v1
+    container_name: sentiment-ui
+    ports:
+      - "8501:8501"
+    
+  producer:
+    image: sudarsan222/kafka_producer:v3   
+    container_name: sentiment-producer   
+    command: python producer.py
+    environment:
+      INPUT: /app/data/Reddit_datasetv1.txt
+      BOOTSTRAP: kafka:9092
+      STARTUP_DELAY: "5" 
+    depends_on:
+      - kafka
+
+
+volumes:
+  kafka-data:

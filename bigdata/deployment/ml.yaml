@@ -1,0 +1,155 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ml-trainer
+  namespace: reddit-sentiment
+spec:
+  template:
+    spec:
+      containers:
+      - name: ml-trainer
+        image: sudarsan222/reddit-sentiment:v2
+        command: ["python", "ml/sentiment_model.py"]
+        env:
+        - name: KAFKA_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: KAFKA_URL
+        volumeMounts:
+        - name: checkpoint-storage
+          mountPath: /app/ckpt
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: checkpoint-storage
+        persistentVolumeClaim:
+          claimName: ml-checkpoint-pvc
+      restartPolicy: OnFailure
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-api
+  namespace: reddit-sentiment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml-api
+  template:
+    metadata:
+      labels:
+        app: ml-api
+    spec:
+      containers:
+      - name: ml-api
+        image: sudarsan222/reddit-sentiment:v2
+        command: ["uvicorn", "ml.sentiment_api:app", "--host", "0.0.0.0", "--port", "8000"]
+        ports:
+        - containerPort: 8000
+        env:
+        - name: PYTHONPATH
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: PYTHONPATH
+        - name: KAFKA_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: KAFKA_URL
+        volumeMounts:
+        - name: checkpoint-storage
+          mountPath: /app/ckpt
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        # REMOVED THE PROBLEMATIC HEALTH CHECKS
+      volumes:
+      - name: checkpoint-storage
+        persistentVolumeClaim:
+          claimName: ml-checkpoint-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-api-service
+  namespace: reddit-sentiment
+spec:
+  selector:
+    app: ml-api
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentiment-ui
+  namespace: reddit-sentiment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sentiment-ui
+  template:
+    metadata:
+      labels:
+        app: sentiment-ui
+    spec:
+      containers:
+      - name: sentiment-ui
+        image: sudarsan222/ui:v1
+        workingDir: /app
+        command: 
+        - sh
+        - -c
+        - |
+          pip install streamlit requests streamlit-autorefresh pandas && 
+          streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+        ports:
+        - containerPort: 8501
+        volumeMounts:
+        - name: streamlit-app
+          mountPath: /app/streamlit_app.py
+          subPath: streamlit_app.py
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: streamlit-app
+        configMap:
+          name: streamlit-app-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentiment-ui-service
+  namespace: reddit-sentiment
+spec:
+  selector:
+    app: sentiment-ui
+  ports:
+  - port: 8501
+    targetPort: 8501
+  type: LoadBalancer
