@@ -178,7 +178,7 @@ try:
         
         # *** EARLY STOPPING FOR EXCELLENT PERFORMANCE ***
         if current_loss < 0.55:
-            log.info(f"🎯 EXCELLENT loss {current_loss:.4f} reached! Saving and stopping.")
+            log.info(f"EXCELLENT loss {current_loss:.4f} reached! Saving and stopping.")
             save_checkpoint(model, step, current_loss, is_best=True)
             break
             
